@@ -742,4 +742,6 @@ int dsi_display_esd_irq_ctrl(struct dsi_display *display,
 		bool enable);
 #endif
 
+struct dsi_display *get_main_display(void);
+
 #endif /* _DSI_DISPLAY_H_ */
