@@ -1,0 +1,5 @@
+config AIROHA_GPS
+	bool "Airoha GPS Support"
+	default n
+	help
+	  Airoha GPS Support
