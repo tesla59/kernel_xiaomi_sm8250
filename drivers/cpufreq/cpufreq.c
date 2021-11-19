@@ -2267,8 +2267,10 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
 			CPUFREQ_ADJUST, new_policy);
 
 	/* adjust if necessary - hardware incompatibility */
+#ifndef CONFIG_MACH_XIAOMI
 	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
 			CPUFREQ_INCOMPATIBLE, new_policy);
+#endif
 
 	/*
 	 * verify the cpu speed can be set within this limit, which might be
