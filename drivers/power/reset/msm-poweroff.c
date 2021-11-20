@@ -47,6 +47,9 @@
 
 #define KASLR_OFFSET_PROP "qcom,msm-imem-kaslr_offset"
 #define KASLR_OFFSET_BIT_MASK	0x00000000FFFFFFFF
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+#define DISPLAY_CONFIG_OFFSET_PROP "qcom,msm-imem-display_config_offset"
+#endif
 
 static int restart_mode;
 static void *restart_reason, *dload_type_addr;
@@ -280,6 +283,26 @@ static void store_kaslr_offset(void)
 }
 #endif /* CONFIG_RANDOMIZE_BASE */
 
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+/*
+ * set display config imem first 4 bytes to 0xdead4ead, because imem context
+ * will not lost when warm reset. if panic, xbl ramdump will display orange
+ * screen, and framebuffer addr is determined by these four bytes in
+ * MDP_GetDisplayBootConfig function. so set these four bytes to a invalid
+ * value and let the framebuffer of orange screen use
+ * RAMDUMP_FRAME_BUFFER_ADDRESS(0xb0400000)
+ */
+static void clear_display_config(void)
+{
+	void *display_config_imem_addr = map_prop_mem(DISPLAY_CONFIG_OFFSET_PROP);
+
+	if (display_config_imem_addr) {
+		__raw_writel(0xdead4ead, display_config_imem_addr);
+		iounmap(display_config_imem_addr);
+	}
+}
+#endif
+
 static void setup_dload_mode_support(void)
 {
 	int ret;
@@ -294,6 +317,9 @@ static void setup_dload_mode_support(void)
 	emergency_dload_mode_addr = map_prop_mem(EDL_MODE_PROP);
 
 	store_kaslr_offset();
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	clear_display_config();
+#endif
 
 	dload_type_addr = map_prop_mem(IMEM_DL_TYPE_PROP);
 	if (!dload_type_addr)
@@ -529,6 +555,9 @@ static void msm_restart_prepare(const char *cmd)
 				__raw_writel(0x6f656d00 | (code & 0xff),
 					     restart_reason);
 		} else if (!strncmp(cmd, "edl", 3)) {
+#ifdef CONFIG_MACH_XIAOMI
+			if (0)
+#endif
 			enable_emergency_dload_mode();
 		} else {
 			__raw_writel(0x77665501, restart_reason);
