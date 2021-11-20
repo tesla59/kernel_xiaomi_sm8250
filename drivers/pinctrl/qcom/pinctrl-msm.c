@@ -572,7 +572,19 @@ static void msm_gpio_dbg_show(struct seq_file *s, struct gpio_chip *chip)
 	unsigned i;
 
 	for (i = 0; i < chip->ngpio; i++, gpio++)
+#ifdef CONFIG_MACH_XIAOMI
+	{
+#if defined(CONFIG_MACH_XIAOMI_SM8250)
+		if ((i >= 28 && i <= 31) || (i >= 40 && i <= 43))
+#elif defined(CONFIG_MACH_XIAOMI_SM7250)
+		if ((i >= 0 && i <= 3) || (i >= 59 && i <= 62))
+#endif
+			continue;
+#endif
 		msm_gpio_dbg_show_one(s, NULL, chip, i, gpio);
+#ifdef CONFIG_MACH_XIAOMI
+	}
+#endif
 }
 
 #else
