@@ -15,6 +15,9 @@
 #include <linux/pinctrl/consumer.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+#include <soc/qcom/socinfo_xiaomi.h>
+#endif
 
 #define I2C_INTR_STATUS_BASE	0x0550
 #define INT_RT_STS_OFFSET	0x10
@@ -486,9 +489,20 @@ static int i2c_pmic_read(struct regmap *map, unsigned int reg, void *val,
 {
 	int rc, retries = 0;
 
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	if (socinfo_get_platform_type() == HW_PLATFORM_ELISH ||
+	    socinfo_get_platform_type() == HW_PLATFORM_ENUMA) {
+		do {
+			rc = regmap_bulk_read(map, reg, val, val_count);
+		} while (rc < 0 && retries++ < MAX_I2C_RETRIES);
+	} else {
+#endif
 	do {
 		rc = regmap_bulk_read(map, reg, val, val_count);
 	} while (rc == -ENOTCONN && retries++ < MAX_I2C_RETRIES);
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	}
+#endif
 
 	if (retries > 1)
 		pr_err("i2c_pmic_read failed for %d retries, rc = %d\n",
