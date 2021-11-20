@@ -220,6 +220,10 @@ static void ufshcd_update_uic_error_cnt(struct ufs_hba *hba, u32 reg, int type)
 /* UIC command timeout, unit: ms */
 #define UIC_CMD_TIMEOUT	500
 
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+#define UIC_PWR_CTRL_TIMEOUT 3000
+#endif
+
 /* NOP OUT retries waiting for NOP IN response */
 #define NOP_OUT_RETRIES    10
 /* Timeout after 30 msecs if NOP OUT hangs without response */
@@ -228,7 +232,11 @@ static void ufshcd_update_uic_error_cnt(struct ufs_hba *hba, u32 reg, int type)
 /* Query request retries */
 #define QUERY_REQ_RETRIES 3
 /* Query request timeout */
+#ifdef CONFIG_MACH_XIAOMI
+#define QUERY_REQ_TIMEOUT 3000 /* 3.0 seconds */
+#else
 #define QUERY_REQ_TIMEOUT 1500 /* 1.5 seconds */
+#endif
 
 /* Task management command timeout */
 #define TM_CMD_TIMEOUT	100 /* msecs */
@@ -425,8 +433,13 @@ static struct ufs_dev_fix ufs_fixups[] = {
 	/* UFS cards deviations table */
 	UFS_FIX(UFS_VENDOR_SAMSUNG, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_DELAY_BEFORE_LPM),
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	UFS_FIX(UFS_VENDOR_SAMSUNG, UFS_ANY_MODEL,
+		UFS_DEVICE_NO_FASTAUTO),
+#else
 	UFS_FIX(UFS_ANY_VENDOR, UFS_ANY_MODEL,
 		UFS_DEVICE_NO_FASTAUTO),
+#endif
 	UFS_FIX(UFS_VENDOR_SAMSUNG, UFS_ANY_MODEL,
 		UFS_DEVICE_QUIRK_HOST_PA_TACTIVATE),
 	UFS_FIX(UFS_VENDOR_WDC, UFS_ANY_MODEL,
@@ -463,10 +476,18 @@ static struct ufs_dev_fix ufs_fixups[] = {
 		UFS_DEVICE_QUIRK_HS_G1_TO_HS_G3_SWITCH),
 	UFS_FIX(UFS_VENDOR_SKHYNIX, "hC8HL1",
 		UFS_DEVICE_QUIRK_HS_G1_TO_HS_G3_SWITCH),
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	UFS_FIX(UFS_VENDOR_SKHYNIX, "H9HQ16",
+		UFS_DEVICE_QUIRK_RECOVERY_FROM_DL_NAC_ERRORS),
+#endif
 	UFS_FIX(UFS_VENDOR_SAMSUNG, "KLUEG8UHDB-C2D1",
 		UFS_DEVICE_QUIRK_PA_HIBER8TIME),
 	UFS_FIX(UFS_VENDOR_SAMSUNG, "KLUDG4UHDB-B2D1",
 		UFS_DEVICE_QUIRK_PA_HIBER8TIME),
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	UFS_FIX(UFS_VENDOR_SAMSUNG, "KLUFG8RHDA-B2D1",
+		UFS_DEVICE_QUIRK_PA_HIBER8TIME),
+#endif
 	END_FIX
 };
 
@@ -1745,7 +1766,11 @@ out:
 
 static int ufshcd_clock_scaling_prepare(struct ufs_hba *hba)
 {
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	#define DOORBELL_CLR_TOUT_US		(40 * 1000 * 1000) /* 40 sec */
+#else
 	#define DOORBELL_CLR_TOUT_US		(1000 * 1000) /* 1 sec */
+#endif
 	int ret = 0;
 	/*
 	 * make sure that there are no outstanding requests when
@@ -3988,7 +4013,11 @@ static int ufshcd_wait_for_dev_cmd(struct ufs_hba *hba,
 		ufshcd_outstanding_req_clear(hba, lrbp->task_tag);
 	}
 
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	if (err && err != -EAGAIN)
+#else
 	if (err)
+#endif
 		ufsdbg_set_err_state(hba);
 
 	return err;
@@ -5158,7 +5187,11 @@ static int ufshcd_uic_pwr_ctrl(struct ufs_hba *hba, struct uic_command *cmd)
 
 more_wait:
 	if (!wait_for_completion_timeout(hba->uic_async_done,
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+					 msecs_to_jiffies(UIC_PWR_CTRL_TIMEOUT))) {
+#else
 					 msecs_to_jiffies(UIC_CMD_TIMEOUT))) {
+#endif
 		u32 intr_status = 0;
 		s64 ts_since_last_intr;
 
@@ -5675,6 +5708,9 @@ static int ufshcd_complete_dev_init(struct ufs_hba *hba)
 	int i;
 	int err;
 	bool flag_res = 1;
+#ifdef CONFIG_MACH_XIAOMI
+	ktime_t timeout;
+#endif
 
 	err = ufshcd_query_flag_retry(hba, UPIU_QUERY_OPCODE_SET_FLAG,
 		QUERY_FLAG_IDN_FDEVICEINIT, NULL);
@@ -5685,10 +5721,38 @@ static int ufshcd_complete_dev_init(struct ufs_hba *hba)
 		goto out;
 	}
 
+#ifdef CONFIG_MACH_XIAOMI
+	/*
+	* Some vendor devices are taking longer time to complete its internal
+	* initialization, so set fDeviceInit flag poll time to 5 secs
+	*/
+	timeout = ktime_add_ms(ktime_get(), 5000);
+
+	/* poll for max. 5sec for fDeviceInit flag to clear */
+	i = 0;
+	while (1) {
+		bool timedout = ktime_after(ktime_get(), timeout);
+#else
 	/* poll for max. 1000 iterations for fDeviceInit flag to clear */
 	for (i = 0; i < 1000 && !err && flag_res; i++)
+#endif
 		err = ufshcd_query_flag_retry(hba, UPIU_QUERY_OPCODE_READ_FLAG,
 			QUERY_FLAG_IDN_FDEVICEINIT, &flag_res);
+#ifdef CONFIG_MACH_XIAOMI
+		if (err || !flag_res || timedout)
+			break;
+
+		/*
+		* Poll for this flag in a tight loop for first 1000 iterations.
+		* This is same as old logic which is working for most of the
+		* devices, so continue using the same.
+		*/
+		if (i == 1000)
+			msleep(20);
+		else
+			i++;
+	}
+#endif
 
 	if (err)
 		dev_err(hba->dev,
@@ -6087,6 +6151,7 @@ static int ufshcd_get_lu_wp(struct ufs_hba *hba,
 	return ret;
 }
 
+#ifndef CONFIG_MACH_XIAOMI
 /*
  * ufshcd_get_wb_alloc_units - returns "dLUNumWriteBoosterBufferAllocUnits"
  * @hba: per-adapter instance
@@ -6117,6 +6182,7 @@ static int ufshcd_get_wb_alloc_units(struct ufs_hba *hba,
 					  sizeof(*d_lun_wbb_au));
 	return ret;
 }
+#endif
 
 /**
  * ufshcd_get_lu_power_on_wp_status - get LU's power on write protect
@@ -8498,8 +8564,12 @@ static int ufs_get_device_desc(struct ufs_hba *hba,
 	int err;
 	size_t buff_len;
 	u8 model_index;
+#ifdef CONFIG_MACH_XIAOMI
+	u8 *desc_buf;
+#else
 	u8 *desc_buf, wb_buf[4];
 	u32 lun, res;
+#endif
 
 	buff_len = max_t(size_t, hba->desc_size.dev_desc,
 			 QUERY_DESC_MAX_SIZE + 1);
@@ -8527,6 +8597,7 @@ static int ufs_get_device_desc(struct ufs_hba *hba,
 	model_index = desc_buf[DEVICE_DESC_PARAM_PRDCT_NAME];
 
 
+#ifndef CONFIG_MACH_XIAOMI
 	/* Enable WB only for UFS-3.1 or UFS-2.2 OR if desc len >= 0x59 */
 	if ((dev_desc->wspecversion >= 0x310) ||
 	    (dev_desc->wspecversion == 0x220) ||
@@ -8562,8 +8633,11 @@ static int ufs_get_device_desc(struct ufs_hba *hba,
 			}
 		}
 	}
+#endif
 
+#ifndef CONFIG_MACH_XIAOMI
 skip_unit_desc:
+#endif
 	/* Zero-pad entire buffer for string termination. */
 	memset(desc_buf, 0, buff_len);
 
@@ -9198,6 +9272,14 @@ reinit:
 		scsi_scan_host(hba->host);
 		pm_runtime_put_sync(hba->dev);
 	}
+
+#ifdef CONFIG_MACH_XIAOMI
+	/*
+	 * Enable auto hibern8 if supported, after full host and
+	 * device initialization.
+	 */
+	ufshcd_set_auto_hibern8_timer(hba);
+#endif
 
 out:
 	if (ret) {
