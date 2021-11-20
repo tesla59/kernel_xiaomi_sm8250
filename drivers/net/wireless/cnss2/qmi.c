@@ -506,14 +506,14 @@ out:
 static void cnss_get_xiaomi_bdf_file_name(char filename_tmp[MAX_FIRMWARE_NAME_LEN],
 										  u32 filename_len,
 										  u32 bdf_type) {
-	int hw_platform_ver = get_hw_version_platform();
+	int hw_platform_ver = socinfo_get_platform_type();
 	int hw_country_ver = get_hw_country_version();
 	int hw_minor_ver = get_hw_version_minor();
 	int hw_major_ver = get_hw_version_major();
 
 	switch (bdf_type) {
 		case CNSS_BDF_ELF:
-			if (hw_platform_ver == HARDWARE_PLATFORM_LMI) {
+			if (hw_platform_ver == HW_PLATFORM_LMI) {
 				if (hw_country_ver == CountryGlobal) {
 					WRITE_BDF_STRING(ELF_BDF_FILE_NAME_J11_GLOBAL)
 				} else if (hw_country_ver == CountryIndia) {
@@ -525,11 +525,11 @@ static void cnss_get_xiaomi_bdf_file_name(char filename_tmp[MAX_FIRMWARE_NAME_LE
 					else
 						WRITE_BDF_STRING(ELF_BDF_FILE_NAME_J11)
 				}
-			} else if (hw_platform_ver == HARDWARE_PLATFORM_CAS) {
+			} else if (hw_platform_ver == HW_PLATFORM_CAS) {
 				WRITE_BDF_STRING(ELF_BDF_FILE_NAME_J1S)
-			} else if (hw_platform_ver == HARDWARE_PLATFORM_THYME) {
+			} else if (hw_platform_ver == HW_PLATFORM_THYME) {
 				WRITE_BDF_STRING(ELF_BDF_FILE_NAME_J2S)
-			} else if (hw_platform_ver == HARDWARE_PLATFORM_APOLLO) {
+			} else if (hw_platform_ver == HW_PLATFORM_APOLLO) {
 				if (hw_country_ver == CountryGlobal) {
 					WRITE_BDF_STRING(ELF_BDF_FILE_NAME_J3S_GLOBAL)
 				} else if (hw_country_ver == CountryIndia) {
@@ -537,7 +537,7 @@ static void cnss_get_xiaomi_bdf_file_name(char filename_tmp[MAX_FIRMWARE_NAME_LE
 				} else {
 					WRITE_BDF_STRING(ELF_BDF_FILE_NAME_J3S)
 				}
-			} else if (hw_platform_ver == HARDWARE_PLATFORM_ALIOTH) {
+			} else if (hw_platform_ver == HW_PLATFORM_ALIOTH) {
 				if (hw_country_ver == CountryGlobal) {
 					WRITE_BDF_STRING(ELF_BDF_FILE_NAME_K11A_GLOBAL)
 				} else if (hw_country_ver == CountryIndia) {
@@ -545,9 +545,9 @@ static void cnss_get_xiaomi_bdf_file_name(char filename_tmp[MAX_FIRMWARE_NAME_LE
 				} else {
 					WRITE_BDF_STRING(ELF_BDF_FILE_NAME_K11A)
 				}
-			} else if (hw_platform_ver == HARDWARE_PLATFORM_ENUMA) {
+			} else if (hw_platform_ver == HW_PLATFORM_ENUMA) {
 				WRITE_BDF_STRING(ELF_BDF_FILE_NAME_K81)
-			} else if (hw_platform_ver == HARDWARE_PLATFORM_ELISH) {
+			} else if (hw_platform_ver == HW_PLATFORM_ELISH) {
 				WRITE_BDF_STRING(ELF_BDF_FILE_NAME_K81A)
 			} else {
 				if (hw_country_ver == CountryGlobal) {
@@ -564,7 +564,7 @@ static void cnss_get_xiaomi_bdf_file_name(char filename_tmp[MAX_FIRMWARE_NAME_LE
 			}
 			break;
 		case CNSS_BDF_REGDB:
-			if (hw_platform_ver == HARDWARE_PLATFORM_LMI)
+			if (hw_platform_ver == HW_PLATFORM_LMI)
 				WRITE_BDF_STRING(REGDB_FILE_NAME_J11)
 			else
 				WRITE_BDF_STRING(REGDB_FILE_NAME)

@@ -1,0 +1,1 @@
+obj-$(CONFIG_WATCHDOG_MAX28200)		+= max28200.o

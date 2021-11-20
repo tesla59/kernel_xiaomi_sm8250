@@ -1,0 +1,16 @@
+menu "Maxim Integrated Products charger support"
+
+config ONEWIRE_GPIO
+	bool
+	prompt "Support Onewire Driver."
+	default n
+	help
+		It's an onewire driver.
+
+source "drivers/power/supply/xiaomi/maxim/ds28e16/Kconfig"
+
+source "drivers/power/supply/xiaomi/maxim/max28200/Kconfig"
+
+source "drivers/power/supply/xiaomi/maxim/max77932/Kconfig"
+
+endmenu

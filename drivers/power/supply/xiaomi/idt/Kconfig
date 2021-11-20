@@ -1,0 +1,9 @@
+menu "Integrated Device Technology charger support"
+
+source "drivers/power/supply/xiaomi/idt/idtp9415/Kconfig"
+
+source "drivers/power/supply/xiaomi/idt/idtp9415_cas/Kconfig"
+
+source "drivers/power/supply/xiaomi/idt/idtp9418/Kconfig"
+
+endmenu

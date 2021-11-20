@@ -13,3 +13,6 @@ obj-$(CONFIG_QPNP_QG)			+= qpnp-qg.o pmic-voter.o qg-util.o qg-soc.o qg-sdam.o q
 obj-$(CONFIG_HL6111R)			+= hl6111r.o
 obj-$(CONFIG_SMB1398_CHARGER)		+= smb1398-charger.o pmic-voter.o
 obj-$(CONFIG_QPNP_SMBLITE)		+= step-chg-jeita.o battery.o qpnp-smblite.o smblite-lib.o pmic-voter.o storm-watch.o schgm-flashlite.o
+obj-$(CONFIG_SMB1398_COMBO_CHARGE_PSY)	+= smb1398-charger-psy.o pmic-voter.o
+obj-$(CONFIG_FUEL_GAUGE_BQ27Z561)       += bq27z561_fg.o
+obj-$(CONFIG_DUAL_FUEL_GAUGE_BQ27Z561)  += bq27z561_fg.o dual_fuel_gauge_class.o

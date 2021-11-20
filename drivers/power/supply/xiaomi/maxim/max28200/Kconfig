@@ -1,0 +1,4 @@
+config WATCHDOG_MAX28200
+	tristate "maxim watch dog max28200 driver"
+	help
+	  Say Y to enable support for maxim max28200 driver
