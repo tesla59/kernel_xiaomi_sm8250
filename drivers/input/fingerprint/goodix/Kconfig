@@ -1,0 +1,7 @@
+config GOODIX_NETLINK
+    tristate "Goodix netlink"
+    help
+      Select Y here to enable Goodix netlink library.
+
+source "drivers/input/fingerprint/goodix/goodix/Kconfig"
+source "drivers/input/fingerprint/goodix/goodix_fod/Kconfig"

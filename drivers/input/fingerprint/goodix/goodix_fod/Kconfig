@@ -1,0 +1,11 @@
+config FINGERPRINT_GOODIX_FOD
+	tristate "Finger print card goodix"
+	depends on INPUT_FINGERPRINT
+	select GOODIX_NETLINK
+	help
+	  Say Y here to enable support for retrieving self-test reports.
+
+	  If unsure, say N.
+
+	  To compile this driver as a module, choose M here.
+
