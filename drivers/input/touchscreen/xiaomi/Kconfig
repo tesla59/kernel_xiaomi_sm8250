@@ -1,0 +1,29 @@
+if MACH_XIAOMI
+
+menuconfig TOUCHSCREEN_XIAOMI
+    bool "Xiaomi Touchscreens"
+    default y if MACH_XIAOMI
+    help
+      Touchscreen drivers for Xiaomi devices.
+
+if TOUCHSCREEN_XIAOMI
+
+source "drivers/input/touchscreen/xiaomi/focaltech_spi/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/focaltech_touch_mi/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/focaltouch/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/fts_521/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/goodix_driver_gt9886/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/nt36523/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/nt36672c/Kconfig"
+
+source "drivers/input/touchscreen/xiaomi/xiaomi_touch/Kconfig"
+
+endif
+
+endif
