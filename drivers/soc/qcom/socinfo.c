@@ -22,6 +22,10 @@
 #include <linux/soc/qcom/smem.h>
 #include <soc/qcom/boot_stats.h>
 
+#ifdef CONFIG_MACH_XIAOMI
+#include <soc/qcom/socinfo_xiaomi.h>
+#endif
+
 #define BUILD_ID_LENGTH 32
 #define CHIP_ID_LENGTH 32
 #define SMEM_IMAGE_VERSION_BLOCKS_COUNT 32
@@ -77,6 +81,24 @@ const char *hw_platform[] = {
 	[HW_PLATFORM_SBC] = "SBC",
 	[HW_PLATFORM_HDK] = "HDK",
 	[HW_PLATFORM_IDP] = "IDP"
+#ifdef CONFIG_MACH_XIAOMI
+	,
+#if defined(CONFIG_MACH_XIAOMI_SM8250)
+	[HW_PLATFORM_UMI] = "UMI",
+	[HW_PLATFORM_CMI] = "CMI",
+	[HW_PLATFORM_LMI] = "LMI",
+	[HW_PLATFORM_CAS] = "CAS",
+	[HW_PLATFORM_APOLLO] = "APOLLO",
+	[HW_PLATFORM_ALIOTH] = "ALIOTH",
+	[HW_PLATFORM_THYME] = "THYME",
+	[HW_PLATFORM_ENUMA] = "ENUMA",
+	[HW_PLATFORM_ELISH] = "ELISH",
+#elif defined(CONFIG_MACH_XIAOMI_SM7250)
+	[HW_PLATFORM_VANGOGH] = "VANGOGH",
+	[HW_PLATFORM_PICASSO] = "PICASSO",
+	[HW_PLATFORM_MONET]  = "MONET",
+#endif
+#endif
 };
 
 enum {
