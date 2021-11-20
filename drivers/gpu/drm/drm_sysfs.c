@@ -21,6 +21,9 @@
 #include <drm/drm_sysfs.h>
 #include <drm/drmP.h>
 #include "drm_internal.h"
+#ifdef CONFIG_MACH_XIAOMI
+#include "xiaomi/drm_sysfs.h"
+#endif
 
 #define to_drm_minor(d) dev_get_drvdata(d)
 #define to_drm_connector(d) dev_get_drvdata(d)
@@ -44,6 +47,9 @@ static struct device_type drm_sysfs_device_minor = {
 };
 
 struct class *drm_class;
+#ifdef CONFIG_MACH_XIAOMI
+struct device *connector_kdev;
+#endif
 
 static char *drm_devnode(struct device *dev, umode_t *mode)
 {
@@ -261,6 +267,9 @@ static const struct attribute_group connector_dev_group = {
 
 static const struct attribute_group *connector_dev_groups[] = {
 	&connector_dev_group,
+#ifdef CONFIG_MACH_XIAOMI
+	&xiaomi_connector_dev_group,
+#endif
 	NULL
 };
 
@@ -278,6 +287,11 @@ int drm_sysfs_connector_add(struct drm_connector *connector)
 					  connector->name);
 	DRM_DEBUG("adding \"%s\" to sysfs\n",
 		  connector->name);
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (!connector_kdev)
+		connector_kdev = connector->kdev;
+#endif
 
 	if (IS_ERR(connector->kdev)) {
 		DRM_ERROR("failed to register connector device: %ld\n", PTR_ERR(connector->kdev));

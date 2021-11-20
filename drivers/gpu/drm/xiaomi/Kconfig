@@ -1,0 +1,6 @@
+config DRM_XIAOMI
+	tristate "Xiaomi DRM extension"
+	depends on DRM
+	default y if MACH_XIAOMI
+	help
+	   Xiaomi DRM extensions
