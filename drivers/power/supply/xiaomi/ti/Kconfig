@@ -1,0 +1,23 @@
+menu "TI Technologies, Inc. charger support"
+
+config CP_QC30
+	tristate "CP quick charge 3.0"
+	depends on I2C
+	help
+	  Say Y to include support for CP quick charge 3.0.
+
+config PD_POLICY_MANAGER
+	tristate "PD policy manager driver"
+	depends on I2C
+	help
+	  Say Y to include support for PD policy manager.
+
+source "drivers/power/supply/xiaomi/ti/bq_wireless/Kconfig"
+
+source "drivers/power/supply/xiaomi/ti/bq2597x/Kconfig"
+
+source "drivers/power/supply/xiaomi/ti/bq25790/Kconfig"
+
+source "drivers/power/supply/xiaomi/ti/ln8000/Kconfig"
+
+endmenu

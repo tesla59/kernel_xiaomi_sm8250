@@ -1,0 +1,5 @@
+config CHARGER_BQ25790
+	tristate "TI BQ25790 battery charger driver"
+	depends on I2C
+	help
+	  Say Y to enable support for TI bq2588x charger driver

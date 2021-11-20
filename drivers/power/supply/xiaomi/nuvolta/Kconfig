@@ -1,0 +1,7 @@
+menu "NuVolta charger support"
+
+source "drivers/power/supply/xiaomi/nuvolta/rx1619/Kconfig"
+
+source "drivers/power/supply/xiaomi/nuvolta/rx1619_cas/Kconfig"
+
+endmenu

@@ -1,0 +1,5 @@
+menu "Lion Semiconductor charger support"
+
+source "drivers/power/supply/xiaomi/lionsemi/ln8282/Kconfig"
+
+endmenu

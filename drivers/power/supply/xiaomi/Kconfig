@@ -1,0 +1,14 @@
+if MACH_XIAOMI
+
+menu "Xiaomi charging drivers"
+
+source "drivers/power/supply/xiaomi/cas_qcom/Kconfig"
+source "drivers/power/supply/xiaomi/idt/Kconfig"
+source "drivers/power/supply/xiaomi/lionsemi/Kconfig"
+source "drivers/power/supply/xiaomi/maxim/Kconfig"
+source "drivers/power/supply/xiaomi/nuvolta/Kconfig"
+source "drivers/power/supply/xiaomi/ti/Kconfig"
+
+endmenu
+
+endif
