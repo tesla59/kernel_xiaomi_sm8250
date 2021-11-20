@@ -64,6 +64,9 @@ ifdef CONFIG_MSM_SUBSYSTEM_RESTART
 endif
 obj-$(CONFIG_QCOM_EUD) += eud.o
 obj-$(CONFIG_SOC_BUS) += socinfo.o
+ifdef CONFIG_MACH_XIAOMI
+	obj-$(CONFIG_SOC_BUS) += socinfo_xiaomi.o
+endif
 obj-$(CONFIG_QCOM_WATCHDOG_V2) += watchdog_v2.o
 obj-$(CONFIG_QCOM_SDM845_LLCC) += llcc-sdm845.o
 CFLAGS_rpmh-rsc.o := -I$(src)
