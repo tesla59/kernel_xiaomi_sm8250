@@ -16,6 +16,9 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/of_regulator.h>
 #include <linux/string.h>
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+#include <soc/qcom/socinfo_xiaomi.h>
+#endif
 
 #define pm8008_err(reg, message, ...) \
 	pr_err("%s: " message, (reg)->rdesc.name, ##__VA_ARGS__)
@@ -67,6 +70,10 @@
 #define MAX_REG_NAME			20
 #define PM8008_MAX_LDO			7
 
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+#define MAX_RETRY_TIME			5
+#endif
+
 struct pm8008_chip {
 	struct device		*dev;
 	struct regmap		*regmap;
@@ -113,8 +120,22 @@ static struct regulator_data reg_data[] = {
 static int pm8008_read(struct regmap *regmap,  u16 reg, u8 *val, int count)
 {
 	int rc;
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	int retry = 0;
+#endif
 
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	if (socinfo_get_platform_type() == HW_PLATFORM_ELISH ||
+	    socinfo_get_platform_type() == HW_PLATFORM_ENUMA) {
+		do {
+			rc = regmap_bulk_read(regmap, reg, val, count); // git
+		} while (rc < 0 && retry++ < MAX_RETRY_TIME);
+	} else {
+#endif
 	rc = regmap_bulk_read(regmap, reg, val, count);
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	}
+#endif
 	if (rc < 0)
 		pr_err("failed to read 0x%04x\n", reg);
 
@@ -124,9 +145,23 @@ static int pm8008_read(struct regmap *regmap,  u16 reg, u8 *val, int count)
 static int pm8008_write(struct regmap *regmap, u16 reg, u8 *val, int count)
 {
 	int rc;
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	int retry = 0;
+#endif
 
 	pr_debug("Writing 0x%02x to 0x%04x\n", val, reg);
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	if (socinfo_get_platform_type() == HW_PLATFORM_ELISH ||
+	    socinfo_get_platform_type() == HW_PLATFORM_ENUMA) {
+		do {
+			rc = regmap_bulk_write(regmap, reg, val, count); // git
+		} while (rc < 0 && retry++ < MAX_RETRY_TIME);
+	} else {
+#endif
 	rc = regmap_bulk_write(regmap, reg, val, count);
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	}
+#endif
 	if (rc < 0)
 		pr_err("failed to write 0x%04x\n", reg);
 
@@ -137,9 +172,23 @@ static int pm8008_masked_write(struct regmap *regmap, u16 reg, u8 mask,
 				u8 val)
 {
 	int rc;
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	int retry = 0;
+#endif
 
 	pr_debug("Writing 0x%02x to 0x%04x with mask 0x%02x\n", val, reg, mask);
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	if (socinfo_get_platform_type() == HW_PLATFORM_ELISH ||
+	    socinfo_get_platform_type() == HW_PLATFORM_ENUMA) {
+		do {
+			rc = regmap_update_bits(regmap, reg, mask, val); // git
+		} while (rc < 0 && retry++ < MAX_RETRY_TIME);
+	} else {
+#endif
 	rc = regmap_update_bits(regmap, reg, mask, val);
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+	}
+#endif
 	if (rc < 0)
 		pr_err("failed to write 0x%02x to 0x%04x with mask 0x%02x\n",
 				val, reg, mask);
@@ -187,15 +236,24 @@ static int pm8008_regulator_is_enabled(struct regulator_dev *rdev)
 static int pm8008_regulator_enable(struct regulator_dev *rdev)
 {
 	struct pm8008_regulator *pm8008_reg = rdev_get_drvdata(rdev);
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	int rc, delay_us, delay_ms, retry_count = 10;
+#else
 	int rc, rc2, current_uv, delay_us, delay_ms, retry_count = 10;
+#endif
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	int init_mv;
+#endif
 	u8 reg;
 
+#ifndef CONFIG_MACH_XIAOMI_SM7250
 	current_uv = pm8008_regulator_get_voltage(rdev);
 	if (current_uv < 0) {
 		pm8008_err(pm8008_reg, "failed to get current voltage rc=%d\n",
 			current_uv);
 		return current_uv;
 	}
+#endif
 
 	rc = regulator_enable(pm8008_reg->en_supply);
 	if (rc < 0) {
@@ -205,6 +263,7 @@ static int pm8008_regulator_enable(struct regulator_dev *rdev)
 	}
 
 	if (pm8008_reg->parent_supply) {
+#ifndef CONFIG_MACH_XIAOMI_SM7250
 		rc = regulator_set_voltage(pm8008_reg->parent_supply,
 					current_uv + pm8008_reg->min_dropout_uv,
 					INT_MAX);
@@ -213,14 +272,20 @@ static int pm8008_regulator_enable(struct regulator_dev *rdev)
 				rc);
 			goto remove_en;
 		}
+#endif
 
 		rc = regulator_enable(pm8008_reg->parent_supply);
 		if (rc < 0) {
 			pm8008_err(pm8008_reg,
 				"failed to enable parent rc=%d\n", rc);
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+			regulator_disable(pm8008_reg->en_supply);
+			return rc;
+#else
 			regulator_set_voltage(pm8008_reg->parent_supply, 0,
 						INT_MAX);
 			goto remove_en;
+#endif
 		}
 	}
 
@@ -237,8 +302,20 @@ static int pm8008_regulator_enable(struct regulator_dev *rdev)
 	 * Wait for the VREG_READY status bit to be set using a timeout delay
 	 * calculated from the current commanded voltage.
 	 */
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	init_mv = pm8008_regulator_get_voltage(rdev) / 1000;
+	if (init_mv < 0) {
+		pm8008_err(pm8008_reg,
+			"failed to get regulator voltage rc=%d\n", rc);
+		goto out;
+	}
+#endif
 	delay_us = STARTUP_DELAY_USEC
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+			+ DIV_ROUND_UP(init_mv * 1000, pm8008_reg->step_rate);
+#else
 			+ DIV_ROUND_UP(current_uv, pm8008_reg->step_rate);
+#endif
 	delay_ms = DIV_ROUND_UP(delay_us, 1000);
 
 	/* Retry 10 times for VREG_READY before bailing out */
@@ -253,7 +330,11 @@ static int pm8008_regulator_enable(struct regulator_dev *rdev)
 		if (rc < 0) {
 			pm8008_err(pm8008_reg,
 				"failed to read regulator status rc=%d\n", rc);
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+			goto out;
+#else
 			goto disable_ldo;
+#endif
 		}
 		if (reg & VREG_READY_BIT) {
 			pm8008_debug(pm8008_reg, "regulator enabled\n");
@@ -262,13 +343,29 @@ static int pm8008_regulator_enable(struct regulator_dev *rdev)
 	}
 
 	pm8008_err(pm8008_reg, "failed to enable regulator, VREG_READY not set\n");
+#ifndef CONFIG_MACH_XIAOMI_SM7250
 	rc = -ETIME;
+#endif
 
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+out:
+#else
 disable_ldo:
+#endif
 	pm8008_masked_write(pm8008_reg->regmap,
 			LDO_ENABLE_REG(pm8008_reg->base), ENABLE_BIT, 0);
 
 remove_vote:
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	rc = regulator_disable(pm8008_reg->en_supply);
+	if (pm8008_reg->parent_supply)
+		rc |= regulator_disable(pm8008_reg->parent_supply);
+	if (rc < 0)
+		pm8008_err(pm8008_reg,
+			"failed to disable parent regulator rc=%d\n", rc);
+
+	return -ETIME;
+#else
 	if (pm8008_reg->parent_supply) {
 		rc2 = regulator_disable(pm8008_reg->parent_supply);
 		if (rc2 < 0)
@@ -288,6 +385,7 @@ remove_en:
 			rc2);
 
 	return rc;
+#endif
 }
 
 static int pm8008_regulator_disable(struct regulator_dev *rdev)
@@ -304,14 +402,25 @@ static int pm8008_regulator_disable(struct regulator_dev *rdev)
 		return rc;
 	}
 
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	/* remove vote from chip enable regulator */
+	rc = regulator_disable(pm8008_reg->en_supply);
+	if (rc < 0) {
+		pm8008_err(pm8008_reg,
+		       "failed to disable en_supply rc=%d\n", rc);
+	}
+#endif
+
 	/* remove voltage vote from parent regulator */
 	if (pm8008_reg->parent_supply) {
+#ifndef CONFIG_MACH_XIAOMI_SM7250
 		rc = regulator_disable(pm8008_reg->parent_supply);
 		if (rc < 0) {
 			pm8008_err(pm8008_reg, "failed to disable parent rc=%d\n",
 				rc);
 			return rc;
 		}
+#endif
 		rc = regulator_set_voltage(pm8008_reg->parent_supply,
 					0, INT_MAX);
 		if (rc < 0) {
@@ -319,15 +428,24 @@ static int pm8008_regulator_disable(struct regulator_dev *rdev)
 				rc);
 			return rc;
 		}
+#ifndef CONFIG_MACH_XIAOMI_SM7250
 	}
+#endif
 
 	/* remove vote from chip enable regulator */
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	rc = regulator_disable(pm8008_reg->parent_supply);
+#else
 	rc = regulator_disable(pm8008_reg->en_supply);
+#endif
 	if (rc < 0) {
 		pm8008_err(pm8008_reg, "failed to disable en_supply rc=%d\n",
 			rc);
 		return rc;
 	}
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	}
+#endif
 
 	pm8008_debug(pm8008_reg, "regulator disabled\n");
 	return 0;
@@ -378,8 +496,13 @@ static int pm8008_regulator_set_voltage(struct regulator_dev *rdev,
 				int min_uv, int max_uv, unsigned int *selector)
 {
 	struct pm8008_regulator *pm8008_reg = rdev_get_drvdata(rdev);
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	int rc = 0;
+#else
 	int rc = 0, current_uv = 0, rounded_uv = 0, enabled = 0;
+#endif
 
+#ifndef CONFIG_MACH_XIAOMI_SM7250
 	if (pm8008_reg->parent_supply) {
 		enabled = pm8008_regulator_is_enabled(rdev);
 		if (enabled < 0) {
@@ -391,15 +514,24 @@ static int pm8008_regulator_set_voltage(struct regulator_dev *rdev,
 			rounded_uv = roundup(min_uv, VSET_STEP_UV);
 		}
 	}
+#endif
 
 	/*
 	 * Set the parent_supply voltage before changing the LDO voltage when
 	 * the LDO voltage is being increased.
 	 */
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	if (pm8008_reg->parent_supply) {
+#else
 	if (pm8008_reg->parent_supply && enabled && rounded_uv >= current_uv) {
+#endif
 		/* Request parent voltage with headroom */
 		rc = regulator_set_voltage(pm8008_reg->parent_supply,
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+					pm8008_reg->min_dropout_uv + min_uv,
+#else
 					rounded_uv + pm8008_reg->min_dropout_uv,
+#endif
 					INT_MAX);
 		if (rc < 0) {
 			pm8008_err(pm8008_reg, "failed to request parent supply voltage rc=%d\n",
@@ -409,6 +541,14 @@ static int pm8008_regulator_set_voltage(struct regulator_dev *rdev,
 	}
 
 	rc = pm8008_write_voltage(pm8008_reg, min_uv, max_uv);
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	if (rc < 0) {
+		/* remove parent's voltage vote */
+		if (pm8008_reg->parent_supply)
+			regulator_set_voltage(pm8008_reg->parent_supply,
+						0, INT_MAX);
+	}
+#else
 	if (rc < 0)
 		return rc;
 
@@ -437,6 +577,7 @@ static int pm8008_regulator_set_voltage(struct regulator_dev *rdev,
 			return rc;
 		}
 	}
+#endif
 
 	pm8008_debug(pm8008_reg, "voltage set to %d\n", min_uv);
 	return rc;
@@ -773,7 +914,11 @@ static int pm8008_regulator_probe(struct platform_device *pdev)
 /* PM8008 chip enable regulator callbacks */
 static int pm8008_enable_regulator_enable(struct regulator_dev *rdev)
 {
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	struct pm8008_regulator *chip = rdev_get_drvdata(rdev);
+#else
 	struct pm8008_chip *chip = rdev_get_drvdata(rdev);
+#endif
 	int rc;
 
 	rc = pm8008_masked_write(chip->regmap, MISC_CHIP_ENABLE_REG,
@@ -789,7 +934,11 @@ static int pm8008_enable_regulator_enable(struct regulator_dev *rdev)
 
 static int pm8008_enable_regulator_disable(struct regulator_dev *rdev)
 {
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	struct pm8008_regulator *chip = rdev_get_drvdata(rdev);
+#else
 	struct pm8008_chip *chip = rdev_get_drvdata(rdev);
+#endif
 	int rc;
 
 	rc = pm8008_masked_write(chip->regmap, MISC_CHIP_ENABLE_REG,
@@ -805,7 +954,11 @@ static int pm8008_enable_regulator_disable(struct regulator_dev *rdev)
 
 static int pm8008_enable_regulator_is_enabled(struct regulator_dev *rdev)
 {
+#ifdef CONFIG_MACH_XIAOMI_SM7250
+	struct pm8008_regulator *chip = rdev_get_drvdata(rdev);
+#else
 	struct pm8008_chip *chip = rdev_get_drvdata(rdev);
+#endif
 	int rc;
 	u8 reg;
 
