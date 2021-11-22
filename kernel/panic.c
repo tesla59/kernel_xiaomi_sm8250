@@ -280,7 +280,11 @@ void panic(const char *fmt, ...)
 		 */
 		if (panic_reboot_mode != REBOOT_UNDEFINED)
 			reboot_mode = panic_reboot_mode;
+#ifdef CONFIG_MACH_XIAOMI
+		machine_emergency_restart();
+#else
 		emergency_restart();
+#endif
 	}
 #ifdef __sparc__
 	{
