@@ -2075,6 +2075,43 @@ end:
 	mutex_unlock(&rm->rm_lock);
 }
 
+#ifdef CONFIG_MACH_XIAOMI
+static void _sde_rm_check_and_modify_commit_rsvps(
+		struct sde_rm *rm,
+		struct sde_rm_rsvp *rsvp)
+{
+
+	struct sde_rm_hw_blk *blk;
+	enum sde_hw_blk_type type;
+	bool modify = false;
+
+	if (!rsvp)
+		return;
+	for (type = 0; type < SDE_HW_BLK_MAX; type++) {
+		list_for_each_entry(blk, &rm->hw_blks[type], list) {
+			if (blk->rsvp_nxt &&  blk->rsvp_nxt->enc_id == rsvp->enc_id
+					 && blk->rsvp_nxt != rsvp) {
+				pr_err("rsvp :%x blk->rsvp_nxt :%x, enc_id: %x type :%x\n",
+					rsvp, blk->rsvp_nxt, blk->rsvp_nxt->enc_id , type);
+				SDE_EVT32(rsvp, blk->rsvp_nxt, blk->rsvp_nxt->enc_id , type);
+				modify = true;
+			}
+		}
+	}
+
+	if (modify) {
+		for (type = 0; type < SDE_HW_BLK_MAX; type++) {
+			list_for_each_entry(blk, &rm->hw_blks[type], list) {
+				if (blk->rsvp_nxt && blk->rsvp_nxt->enc_id
+						 == rsvp->enc_id) {
+					blk->rsvp_nxt = rsvp;
+				}
+			}
+		}
+	}
+}
+#endif
+
 static int _sde_rm_commit_rsvp(
 		struct sde_rm *rm,
 		struct sde_rm_rsvp *rsvp,
@@ -2083,6 +2120,10 @@ static int _sde_rm_commit_rsvp(
 	struct sde_rm_hw_blk *blk;
 	enum sde_hw_blk_type type;
 	int ret = 0;
+
+#ifdef CONFIG_MACH_XIAOMI
+	_sde_rm_check_and_modify_commit_rsvps(rm, rsvp);
+#endif
 
 	/* Swap next rsvp to be the active */
 	for (type = 0; type < SDE_HW_BLK_MAX; type++) {

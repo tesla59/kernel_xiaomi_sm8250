@@ -118,3 +118,9 @@ msm_drm-$(CONFIG_DRM_MSM) += \
 obj-$(CONFIG_DRM_MSM)	+= msm_drm.o
 
 obj-$(CONFIG_DRM_FBDEV_EMULATION) += msm_fbdev.o
+
+msm_drm-$(CONFIG_DRM_XIAOMI) += \
+	sde/clone_cooling_device.o \
+	xiaomi_frame_stat.o \
+	dsi/dsi_display_mi.o \
+	dsi/dsi_panel_mi.o \
