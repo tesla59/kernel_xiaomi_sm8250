@@ -509,7 +509,9 @@ static int va_macro_mclk_event(struct snd_soc_dapm_widget *w,
 	int ret = 0;
 	struct device *va_dev = NULL;
 	struct va_macro_priv *va_priv = NULL;
+#ifndef CONFIG_MACH_XIAOMI
 	int clk_src = 0;
+#endif
 
 	if (!va_macro_get_data(component, &va_dev, &va_priv, __func__))
 		return -EINVAL;
@@ -531,6 +533,7 @@ static int va_macro_mclk_event(struct snd_soc_dapm_widget *w,
 		break;
 	case SND_SOC_DAPM_POST_PMD:
 		if (va_priv->lpi_enable) {
+#ifndef CONFIG_MACH_XIAOMI
 			if (va_priv->version == BOLERO_VERSION_2_1) {
 				if (va_priv->swr_ctrl_data) {
 					clk_src = CLK_SRC_TX_RCG;
@@ -547,6 +550,7 @@ static int va_macro_mclk_event(struct snd_soc_dapm_widget *w,
 				dev_dbg(va_dev, "%s: clock switch failed\n",
 					__func__);
 			}
+#endif
 			va_macro_mclk_enable(va_priv, 0, true);
 		} else {
 			bolero_tx_mclk_enable(component, 0);
@@ -1919,9 +1923,15 @@ static const struct snd_soc_dapm_widget va_macro_dapm_widgets_v2[] = {
 		VA_MACRO_AIF3_CAP, 0,
 		va_aif3_cap_mixer_v2, ARRAY_SIZE(va_aif3_cap_mixer_v2)),
 
+#ifdef CONFIG_MACH_XIAOMI
+	SND_SOC_DAPM_SUPPLY_S("VA_SWR_PWR", -2, SND_SOC_NOPM, 0, 0,
+			      va_macro_swr_pwr_event_v2,
+			      SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+#else
 	SND_SOC_DAPM_SUPPLY_S("VA_SWR_PWR", -1, SND_SOC_NOPM, 0, 0,
 			      va_macro_swr_pwr_event_v2,
 			      SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+#endif
 
 	SND_SOC_DAPM_SUPPLY_S("VA_TX_SWR_CLK", 0, SND_SOC_NOPM, 0, 0,
 			      va_macro_tx_swr_clk_event_v2,
@@ -1961,9 +1971,15 @@ static const struct snd_soc_dapm_widget va_macro_dapm_widgets_v3[] = {
 			   SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMU |
 			   SND_SOC_DAPM_PRE_PMD | SND_SOC_DAPM_POST_PMD),
 
+#ifdef CONFIG_MACH_XIAOMI
+	SND_SOC_DAPM_SUPPLY_S("VA_SWR_PWR", -2, SND_SOC_NOPM, 0, 0,
+			      va_macro_swr_pwr_event,
+			      SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+#else
 	SND_SOC_DAPM_SUPPLY_S("VA_SWR_PWR", -1, SND_SOC_NOPM, 0, 0,
 			      va_macro_swr_pwr_event,
 			      SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
+#endif
 };
 
 static const struct snd_soc_dapm_widget va_macro_dapm_widgets[] = {

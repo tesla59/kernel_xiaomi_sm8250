@@ -24,7 +24,15 @@
 #include "adsp_err.h"
 #include <dsp/voice_mhi.h>
 
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+#include <soc/qcom/socinfo_xiaomi.h>
+#endif
+
+#ifdef CONFIG_MACH_XIAOMI
+#define TIMEOUT_MS 1000
+#else
 #define TIMEOUT_MS 300
+#endif
 
 
 #define CMD_STATUS_SUCCESS 0
@@ -4123,6 +4131,12 @@ static int voice_send_cvp_channel_info_v2(struct voice_data *v,
 	case EC_REF_PATH:
 		channel_info_param_data->param_id =
 			VSS_PARAM_VOCPROC_EC_REF_CHANNEL_INFO;
+#ifdef CONFIG_MACH_XIAOMI_SM8250
+		if (socinfo_get_platform_type() == HW_PLATFORM_ELISH ||
+		    socinfo_get_platform_type() == HW_PLATFORM_ENUMA)
+			channel_info->num_channels = (v->dev_rx.port_id == 0x9020) ? 4 : v->dev_rx.no_of_channels;
+		else
+#endif
 		channel_info->num_channels = v->dev_rx.no_of_channels;
 		channel_info->bits_per_sample = v->dev_rx.bits_per_sample;
 		memcpy(&channel_info->channel_mapping,

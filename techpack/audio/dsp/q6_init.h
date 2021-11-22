@@ -94,5 +94,24 @@ static inline void digital_cdc_rsc_mgr_exit(void)
 }
 #endif /* CONFIG_DIGITAL_CDC_RSC_MGR */
 
+#ifdef CONFIG_MACH_XIAOMI
+int elliptic_driver_init(void);
+int elliptic_driver_exit(void);
+#ifdef CONFIG_US_PROXIMITY
+int mius_driver_init(void);
+int mius_driver_exit(void);
+#else
+static inline int mius_driver_init(void)
+{
+	return 0;
+};
+static inline void mius_driver_exit(void)
+{
+};
+#endif
+int crus_sp_init(void);
+void crus_sp_exit(void);
+#endif
+
 #endif
 

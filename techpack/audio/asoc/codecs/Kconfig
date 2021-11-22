@@ -1,3 +1,18 @@
 menu "Qualcomm ASoC additional codecs"
 
+config SND_SOC_CS35L41
+    tristate
+    depends on MACH_XIAOMI
+    default y
+
+config SND_SOC_CS35L41_V2
+    tristate
+    depends on MACH_XIAOMI
+    default y
+
+config SND_SOC_TFA9874
+    tristate
+    depends on MACH_XIAOMI
+    default y
+
 endmenu
