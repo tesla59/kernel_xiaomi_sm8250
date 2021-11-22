@@ -20,6 +20,9 @@
 #include <dsp/q6core.h>
 #include "msm-dai-q6-v2.h"
 #include <asoc/core.h>
+#ifdef CONFIG_MACH_XIAOMI
+#include "codecs/tfa98xx/inc/tfa_platform_interface_definition.h"
+#endif
 
 #define MSM_DAI_PRI_AUXPCM_DT_DEV_ID 1
 #define MSM_DAI_SEC_AUXPCM_DT_DEV_ID 2
@@ -5513,6 +5516,20 @@ static int msm_dai_q6_mi2s_hw_params(struct snd_pcm_substream *substream,
 		&mi2s_dai_data->rx_dai : &mi2s_dai_data->tx_dai);
 	struct msm_dai_q6_dai_data *dai_data = &mi2s_dai_config->mi2s_dai_data;
 	struct afe_param_id_i2s_cfg *i2s = &dai_data->port_config.i2s;
+#ifdef CONFIG_MACH_XIAOMI
+	u16 port_id = 0;
+#endif
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (TFA_ADSP_SUPPORTED) {
+		if (msm_mi2s_get_port_id(dai->id, substream->stream,
+					&port_id) != 0) {
+			dev_err(dai->dev, "%s: Invalid Port ID 0x%x\n",
+					__func__, port_id);
+			return -EINVAL;
+		}
+	}
+#endif
 
 	dai_data->channels = params_channels(params);
 	switch (dai_data->channels) {
@@ -10636,6 +10653,9 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.aif_name = "TERT_TDM_RX_0",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
 				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+#ifdef CONFIG_MACH_XIAOMI
+				SNDRV_PCM_RATE_96000 |
+#endif
 				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
 				   SNDRV_PCM_FMTBIT_S24_LE |
@@ -10657,6 +10677,9 @@ static struct snd_soc_dai_driver msm_dai_q6_tdm_dai[] = {
 			.aif_name = "TERT_TDM_RX_1",
 			.rates = SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |
 				SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |
+#ifdef CONFIG_MACH_XIAOMI
+				SNDRV_PCM_RATE_96000 |
+#endif
 				SNDRV_PCM_RATE_176400 | SNDRV_PCM_RATE_352800,
 			.formats = SNDRV_PCM_FMTBIT_S16_LE |
 				   SNDRV_PCM_FMTBIT_S24_LE |

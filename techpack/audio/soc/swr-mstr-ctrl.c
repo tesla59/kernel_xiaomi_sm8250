@@ -140,6 +140,10 @@ static u8 swrm_get_clk_div(int mclk_freq, int bus_clk_freq)
 	return div_val;
 }
 
+#ifdef CONFIG_MACH_XIAOMI
+static int swrm_master_init(struct swr_mstr_ctrl *swrm);
+#endif
+
 static bool swrm_is_msm_variant(int val)
 {
 	return (val == SWRM_VERSION_1_3);
@@ -881,7 +885,11 @@ static int swrm_cmd_fifo_wr_cmd(struct swr_mstr_ctrl *swrm, u8 cmd_data,
 	 * skip delay if write is handled in platform driver.
 	 */
 	if(!swrm->write)
+#ifdef CONFIG_MACH_XIAOMI
+		usleep_range(250, 255);
+#else
 		usleep_range(150, 155);
+#endif
 	if (cmd_id == 0xF) {
 		/*
 		 * sleep for 10ms for MSM soundwire variant to allow broadcast
@@ -1744,6 +1752,9 @@ static void swrm_enable_slave_irq(struct swr_mstr_ctrl *swrm)
 {
 	int i;
 	int status = 0;
+#ifdef CONFIG_MACH_XIAOMI
+	u32 temp;
+#endif
 
 	status = swr_master_read(swrm, SWRM_MCP_SLV_STATUS);
 	if (!status) {
@@ -1754,6 +1765,10 @@ static void swrm_enable_slave_irq(struct swr_mstr_ctrl *swrm)
 	dev_dbg(swrm->dev, "%s: slave status: 0x%x\n", __func__, status);
 	for (i = 0; i < (swrm->master.num_dev + 1); i++) {
 		if (status & SWRM_MCP_SLV_STATUS_MASK) {
+#ifdef CONFIG_MACH_XIAOMI
+			swrm_cmd_fifo_rd_cmd(swrm, &temp, i, 0x0,
+					SWRS_SCP_INT_STATUS_CLEAR_1, 1);
+#endif
 			swrm_cmd_fifo_wr_cmd(swrm, 0xFF, i, 0x0,
 					SWRS_SCP_INT_STATUS_CLEAR_1);
 			swrm_cmd_fifo_wr_cmd(swrm, 0x4, i, 0x0,
@@ -2069,10 +2084,14 @@ handle_irq:
 					 * as hw will mask host_irq at slave
 					 * but will not unmask it afterwards.
 					 */
+#ifdef CONFIG_MACH_XIAOMI
+					swrm->enable_slave_irq = true;
+#else
 					swrm_cmd_fifo_wr_cmd(swrm, 0xFF, devnum, 0x0,
 						SWRS_SCP_INT_STATUS_CLEAR_1);
 					swrm_cmd_fifo_wr_cmd(swrm, 0x4, devnum, 0x0,
 						SWRS_SCP_INT_STATUS_MASK_1);
+#endif
 				}
 				break;
 			case SWR_ATTACHED_OK:
@@ -2080,10 +2099,14 @@ handle_irq:
 					"%s: device %d got attached\n",
 					__func__, devnum);
 				/* enable host irq from slave device*/
+#ifdef CONFIG_MACH_XIAOMI
+				swrm->enable_slave_irq = true;
+#else
 				swrm_cmd_fifo_wr_cmd(swrm, 0xFF, devnum, 0x0,
 					SWRS_SCP_INT_STATUS_CLEAR_1);
 				swrm_cmd_fifo_wr_cmd(swrm, 0x4, devnum, 0x0,
 					SWRS_SCP_INT_STATUS_MASK_1);
+#endif
 
 				break;
 			case SWR_ALERT:
@@ -2104,16 +2127,32 @@ handle_irq:
 				swrm->intr_mask);
 			break;
 		case SWRM_INTERRUPT_STATUS_RD_FIFO_OVERFLOW:
+#ifdef CONFIG_MACH_XIAOMI
+			value = 0;
+#else
 			value = swr_master_read(swrm, SWRM_CMD_FIFO_STATUS);
+#endif
 			dev_err(swrm->dev,
 				"%s: SWR read FIFO overflow fifo status 0x%x\n",
 				__func__, value);
+#ifdef CONFIG_MACH_XIAOMI
+			swr_master_write(swrm, SWRM_COMP_SW_RESET, 0x01);
+			swrm_master_init(swrm);
+#endif
 			break;
 		case SWRM_INTERRUPT_STATUS_RD_FIFO_UNDERFLOW:
+#ifdef CONFIG_MACH_XIAOMI
+			value = 0;
+#else
 			value = swr_master_read(swrm, SWRM_CMD_FIFO_STATUS);
+#endif
 			dev_err(swrm->dev,
 				"%s: SWR read FIFO underflow fifo status 0x%x\n",
 				__func__, value);
+#ifdef CONFIG_MACH_XIAOMI
+			swr_master_write(swrm, SWRM_COMP_SW_RESET, 0x01);
+			swrm_master_init(swrm);
+#endif
 			break;
 		case SWRM_INTERRUPT_STATUS_WR_CMD_FIFO_OVERFLOW:
 			value = swr_master_read(swrm, SWRM_CMD_FIFO_STATUS);
@@ -2121,6 +2160,10 @@ handle_irq:
 				"%s: SWR write FIFO overflow fifo status %x\n",
 				__func__, value);
 			swr_master_write(swrm, SWRM_CMD_FIFO_CMD, 0x1);
+#ifdef CONFIG_MACH_XIAOMI
+			swr_master_write(swrm, SWRM_COMP_SW_RESET, 0x01);
+			swrm_master_init(swrm);
+#endif
 			break;
 		case SWRM_INTERRUPT_STATUS_CMD_ERROR:
 			value = swr_master_read(swrm, SWRM_CMD_FIFO_STATUS);
@@ -2186,6 +2229,14 @@ handle_irq:
 	}
 	swr_master_write(swrm, SWRM_INTERRUPT_CLEAR, intr_sts);
 	swr_master_write(swrm, SWRM_INTERRUPT_CLEAR, 0x0);
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (swrm->enable_slave_irq) {
+		/* Enable slave irq here */
+		swrm_enable_slave_irq(swrm);
+		swrm->enable_slave_irq = false;
+	}
+#endif
 
 	intr_sts = swr_master_read(swrm, SWRM_INTERRUPT_STATUS);
 	intr_sts_masked = intr_sts & swrm->intr_mask;
@@ -2473,8 +2524,10 @@ static int swrm_master_init(struct swr_mstr_ctrl *swrm)
 	reg[len] = SWRM_COMP_CFG_ADDR;
 	value[len++] = 0x02;
 
+#ifndef CONFIG_MACH_XIAOMI
 	reg[len] = SWRM_COMP_CFG_ADDR;
 	value[len++] = 0x03;
+#endif
 
 	reg[len] = SWRM_INTERRUPT_CLEAR;
 	value[len++] = 0xFFFFFFFF;
@@ -2486,6 +2539,11 @@ static int swrm_master_init(struct swr_mstr_ctrl *swrm)
 
 	reg[len] = SWR_MSTR_RX_SWRM_CPU_INTERRUPT_EN;
 	value[len++] = swrm->intr_mask;
+
+#ifdef CONFIG_MACH_XIAOMI
+	reg[len] = SWRM_COMP_CFG_ADDR;
+	value[len++] = 0x03;
+#endif
 
 	swr_master_bulk_write(swrm, reg, value, len);
 
@@ -2659,6 +2717,10 @@ static int swrm_probe(struct platform_device *pdev)
 				SWRM_NUM_AUTO_ENUM_SLAVES);
 			ret = -EINVAL;
 			goto err_pdata_fail;
+#ifdef CONFIG_MACH_XIAOMI
+		} else {
+			swrm->master.num_dev = swrm->num_dev;
+#endif
 		}
 	}
 
@@ -2833,6 +2895,10 @@ static int swrm_probe(struct platform_device *pdev)
 	 * controller will be up now
 	 */
 	swr_master_add_boarddevices(&swrm->master);
+#ifdef CONFIG_MACH_XIAOMI
+	if (swrm_request_hw_vote(swrm, LPASS_AUDIO_CORE, true))
+		dev_dbg(&pdev->dev, "%s: Audio HW Vote is failed\n", __func__);
+#endif
 	mutex_lock(&swrm->mlock);
 	swrm_clk_request(swrm, true);
 	swrm->version = swr_master_read(swrm, SWRM_COMP_HW_VERSION);
@@ -2980,7 +3046,9 @@ static int swrm_runtime_resume(struct device *dev)
 	int ret = 0;
 	bool swrm_clk_req_err = false;
 	bool hw_core_err = false;
+#ifndef CONFIG_MACH_XIAOMI
 	bool aud_core_err = false;
+#endif
 	struct swr_master *mstr = &swrm->master;
 	struct swr_device *swr_dev;
 
@@ -2998,7 +3066,9 @@ static int swrm_runtime_resume(struct device *dev)
 	if (swrm_request_hw_vote(swrm, LPASS_AUDIO_CORE, true)) {
 		dev_err(dev, "%s:lpass audio hw enable failed\n",
 			__func__);
+#ifndef CONFIG_MACH_XIAOMI
 		aud_core_err = true;
+#endif
 	}
 
 	if ((swrm->state == SWR_MSTR_DOWN) ||
@@ -3084,8 +3154,10 @@ static int swrm_runtime_resume(struct device *dev)
 		swrm->state = SWR_MSTR_UP;
 	}
 exit:
+#ifndef CONFIG_MACH_XIAOMI
 	if (!aud_core_err)
 		swrm_request_hw_vote(swrm, LPASS_AUDIO_CORE, false);
+#endif
 	if (!hw_core_err)
 		swrm_request_hw_vote(swrm, LPASS_HW_CORE, false);
 	if (swrm_clk_req_err)
@@ -3109,7 +3181,9 @@ static int swrm_runtime_suspend(struct device *dev)
 	struct swr_mstr_ctrl *swrm = platform_get_drvdata(pdev);
 	int ret = 0;
 	bool hw_core_err = false;
+#ifndef CONFIG_MACH_XIAOMI
 	bool aud_core_err = false;
+#endif
 	struct swr_master *mstr = &swrm->master;
 	struct swr_device *swr_dev;
 	int current_state = 0;
@@ -3128,11 +3202,13 @@ static int swrm_runtime_suspend(struct device *dev)
 			__func__);
 		hw_core_err = true;
 	}
+#ifndef CONFIG_MACH_XIAOMI
 	if (swrm_request_hw_vote(swrm, LPASS_AUDIO_CORE, true)) {
 		dev_err(dev, "%s:lpass audio hw enable failed\n",
 			__func__);
 		aud_core_err = true;
 	}
+#endif
 
 	if ((current_state == SWR_MSTR_UP) ||
 	    (current_state == SWR_MSTR_SSR)) {
@@ -3226,12 +3302,20 @@ static int swrm_runtime_suspend(struct device *dev)
 		}
 
 	}
+#ifdef CONFIG_MACH_XIAOMI
+	if (swrm_request_hw_vote(swrm, LPASS_AUDIO_CORE, false))
+		dev_dbg(dev, "%s:lpass audio hw enable failed\n",
+			__func__);
+#endif
+
 	/* Retain  SSR state until resume */
 	if (current_state != SWR_MSTR_SSR)
 		swrm->state = SWR_MSTR_DOWN;
 exit:
+#ifndef CONFIG_MACH_XIAOMI
 	if (!aud_core_err)
 		swrm_request_hw_vote(swrm, LPASS_AUDIO_CORE, false);
+#endif
 	if (!hw_core_err)
 		swrm_request_hw_vote(swrm, LPASS_HW_CORE, false);
 	mutex_unlock(&swrm->reslock);

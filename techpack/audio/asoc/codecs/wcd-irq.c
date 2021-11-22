@@ -43,6 +43,9 @@ int wcd_request_irq(struct wcd_irq_info *irq_info, int irq, const char *name,
 		return irq;
 
 	return request_threaded_irq(irq, NULL, handler,
+#ifdef CONFIG_MACH_XIAOMI
+					IRQF_TRIGGER_FALLING |
+#endif
 				    IRQF_ONESHOT | IRQF_TRIGGER_RISING,
 				    name, data);
 }
