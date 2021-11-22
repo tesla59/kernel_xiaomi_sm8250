@@ -1137,6 +1137,9 @@ static void _sde_cp_crtc_enable_hist_irq(struct sde_crtc *sde_crtc)
 	struct sde_crtc_irq_info *node = NULL;
 	int i, irq_idx, ret = 0;
 	unsigned long flags;
+#ifdef CONFIG_MACH_XIAOMI
+	unsigned long state_flags;
+#endif
 
 	if (!crtc_drm) {
 		DRM_ERROR("invalid crtc %pK\n", crtc_drm);
@@ -1166,12 +1169,23 @@ static void _sde_cp_crtc_enable_hist_irq(struct sde_crtc *sde_crtc)
 
 	spin_lock_irqsave(&sde_crtc->spin_lock, flags);
 	node = _sde_cp_get_intr_node(DRM_EVENT_HISTOGRAM, sde_crtc);
+#ifdef CONFIG_MACH_XIAOMI
+	if (!node) {
+		spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
+		return;
+	}
+#else
 	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
 
 	if (!node)
 		return;
+#endif
 
+#ifdef CONFIG_MACH_XIAOMI
+	spin_lock_irqsave(&node->state_lock, state_flags);
+#else
 	spin_lock_irqsave(&node->state_lock, flags);
+#endif
 	if (node->state == IRQ_DISABLED) {
 		ret = sde_core_irq_enable(kms, &irq_idx, 1);
 		if (ret)
@@ -1179,7 +1193,12 @@ static void _sde_cp_crtc_enable_hist_irq(struct sde_crtc *sde_crtc)
 		else
 			node->state = IRQ_ENABLED;
 	}
+#ifdef CONFIG_MACH_XIAOMI
+	spin_unlock_irqrestore(&node->state_lock, state_flags);
+	spin_unlock_irqrestore(&sde_crtc->spin_lock, flags);
+#else
 	spin_unlock_irqrestore(&node->state_lock, flags);
+#endif
 }
 
 static void sde_cp_crtc_setfeature(struct sde_cp_node *prop_node,
@@ -1583,6 +1602,9 @@ void sde_cp_crtc_destroy_properties(struct drm_crtc *crtc)
 	}
 	sde_crtc->ltm_buffer_cnt = 0;
 	sde_crtc->ltm_hist_en = false;
+#ifdef CONFIG_MACH_XIAOMI
+	sde_crtc->hist_irq_idx = -1;
+#endif
 
 	mutex_destroy(&sde_crtc->crtc_cp_lock);
 	INIT_LIST_HEAD(&sde_crtc->active_list);
@@ -1677,6 +1699,9 @@ void sde_cp_crtc_clear(struct drm_crtc *crtc)
 	}
 	sde_crtc->ltm_buffer_cnt = 0;
 	sde_crtc->ltm_hist_en = false;
+#ifdef CONFIG_MACH_XIAOMI
+	sde_crtc->hist_irq_idx = -1;
+#endif
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_free);
 	INIT_LIST_HEAD(&sde_crtc->ltm_buf_busy);
 }
@@ -1886,6 +1911,14 @@ static void dspp_ltm_install_property(struct drm_crtc *crtc)
 	u32 version;
 
 	kms = get_kms(crtc);
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (!kms || !kms->hw_sw_fuse) {
+		DRM_ERROR("!kms = %d\n", !kms);
+		return;
+	}
+#endif
+
 	catalog = kms->catalog;
 	version = catalog->dspp[0].sblk->ltm.version >> 16;
 	snprintf(feature_name, ARRAY_SIZE(feature_name), "%s%d",
@@ -2405,12 +2438,19 @@ static void sde_cp_hist_interrupt_cb(void *arg, int irq_idx)
 	struct sde_crtc *crtc = arg;
 	struct drm_crtc *crtc_drm = &crtc->base;
 	struct sde_hw_dspp *hw_dspp;
+#ifndef CONFIG_MACH_XIAOMI
 	struct sde_kms *kms;
 	struct sde_crtc_irq_info *node = NULL;
+#endif
 	u32 i;
+#ifdef CONFIG_MACH_XIAOMI
+	u32 lock_hist = 1;
+#else
 	int ret = 0;
 	unsigned long flags;
+#endif
 
+#ifndef CONFIG_MACH_XIAOMI
 	/* disable histogram irq */
 	kms = get_kms(crtc_drm);
 	spin_lock_irqsave(&crtc->spin_lock, flags);
@@ -2433,17 +2473,29 @@ static void sde_cp_hist_interrupt_cb(void *arg, int irq_idx)
 		node->state = IRQ_DISABLED;
 	}
 	spin_unlock_irqrestore(&node->state_lock, flags);
+#endif
 
 	/* lock histogram buffer */
 	for (i = 0; i < crtc->num_mixers; i++) {
 		hw_dspp = crtc->mixers[i].hw_dspp;
 		if (hw_dspp && hw_dspp->ops.lock_histogram)
+#ifdef CONFIG_MACH_XIAOMI
+			hw_dspp->ops.lock_histogram(hw_dspp, &lock_hist);
+#else
 			hw_dspp->ops.lock_histogram(hw_dspp, NULL);
+#endif
 	}
 
+#ifdef CONFIG_MACH_XIAOMI
+	crtc->hist_irq_idx = irq_idx;
+#endif
 	/* notify histogram event */
 	sde_crtc_event_queue(crtc_drm, sde_cp_notify_hist_event,
+#ifdef CONFIG_MACH_XIAOMI
+							&crtc->hist_irq_idx, true);
+#else
 							NULL, true);
+#endif
 }
 
 static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
@@ -2455,8 +2507,18 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 	struct sde_kms *kms;
 	int ret;
 	u32 i;
+#ifdef CONFIG_MACH_XIAOMI
+	struct sde_crtc_irq_info *node = NULL;
+	unsigned long flags, state_flags;
+	int irq_idx;
+	u32 lock_hist = 0;
+#endif
 
+#ifdef CONFIG_MACH_XIAOMI
+	if (!crtc_drm || !arg) {
+#else
 	if (!crtc_drm) {
+#endif
 		DRM_ERROR("invalid crtc %pK\n", crtc_drm);
 		return;
 	}
@@ -2467,14 +2529,76 @@ static void sde_cp_notify_hist_event(struct drm_crtc *crtc_drm, void *arg)
 		return;
 	}
 
+#ifndef CONFIG_MACH_XIAOMI
 	if (!crtc->hist_blob)
 		return;
+#endif
 
 	kms = get_kms(crtc_drm);
 	if (!kms || !kms->dev) {
 		SDE_ERROR("invalid arg(s)\n");
 		return;
 	}
+
+#ifdef CONFIG_MACH_XIAOMI
+	/* disable histogram irq */
+	spin_lock_irqsave(&crtc->spin_lock, flags);
+	node = _sde_cp_get_intr_node(DRM_EVENT_HISTOGRAM, crtc);
+
+	if (!node) {
+		spin_unlock_irqrestore(&crtc->spin_lock, flags);
+		DRM_DEBUG_DRIVER("cannot find histogram event node in crtc\n");
+		/* unlock histogram */
+		ret = pm_runtime_get_sync(kms->dev->dev);
+		if (ret < 0) {
+			SDE_ERROR("failed to enable power resource %d\n", ret);
+			SDE_EVT32(ret, SDE_EVTLOG_ERROR);
+			return;
+		}
+		for (i = 0; i < crtc->num_mixers; i++) {
+			hw_dspp = crtc->mixers[i].hw_dspp;
+			if (hw_dspp && hw_dspp->ops.lock_histogram)
+				hw_dspp->ops.lock_histogram(hw_dspp,
+					&lock_hist);
+		}
+		pm_runtime_put_sync(kms->dev->dev);
+		return;
+	}
+
+	irq_idx = *(int *)arg;
+	spin_lock_irqsave(&node->state_lock, state_flags);
+	if (node->state == IRQ_ENABLED) {
+		ret = sde_core_irq_disable_nolock(kms, irq_idx);
+		if (ret) {
+			DRM_ERROR("failed to disable irq %d, ret %d\n",
+				irq_idx, ret);
+			spin_unlock_irqrestore(&node->state_lock, state_flags);
+			spin_unlock_irqrestore(&crtc->spin_lock, flags);
+			ret = pm_runtime_get_sync(kms->dev->dev);
+			if (ret < 0) {
+				SDE_ERROR("failed to enable power %d\n", ret);
+				SDE_EVT32(ret, SDE_EVTLOG_ERROR);
+				return;
+			}
+
+			/* unlock histogram */
+			for (i = 0; i < crtc->num_mixers; i++) {
+				hw_dspp = crtc->mixers[i].hw_dspp;
+				if (hw_dspp && hw_dspp->ops.lock_histogram)
+					hw_dspp->ops.lock_histogram(hw_dspp,
+						&lock_hist);
+			}
+			pm_runtime_put_sync(kms->dev->dev);
+			return;
+		}
+		node->state = IRQ_DISABLED;
+	}
+	spin_unlock_irqrestore(&node->state_lock, state_flags);
+	spin_unlock_irqrestore(&crtc->spin_lock, flags);
+
+	if (!crtc->hist_blob)
+		return;
+#endif
 
 	ret = pm_runtime_get_sync(kms->dev->dev);
 	if (ret < 0) {

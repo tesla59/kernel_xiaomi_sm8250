@@ -299,6 +299,9 @@ struct dsi_ctrl {
 	bool null_insertion_enabled;
 	bool modeupdated;
 	bool split_link_supported;
+#ifdef CONFIG_MACH_XIAOMI
+	bool cmd_mode;
+#endif
 };
 
 /**

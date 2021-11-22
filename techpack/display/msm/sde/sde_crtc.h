@@ -317,6 +317,9 @@ struct sde_crtc {
 	struct sde_crtc_frame_event frame_events[SDE_CRTC_FRAME_EVENT_SIZE];
 	struct list_head frame_event_list;
 	spinlock_t spin_lock;
+#ifdef CONFIG_MACH_XIAOMI
+	spinlock_t fevent_spin_lock;
+#endif
 
 	/* for handling internal event thread */
 	struct sde_crtc_event event_cache[SDE_CRTC_MAX_EVENT_COUNT];
@@ -326,6 +329,9 @@ struct sde_crtc {
 	bool misr_enable_debugfs;
 	u32 misr_frame_count;
 	struct kthread_delayed_work idle_notify_work;
+#ifdef CONFIG_MACH_XIAOMI
+	struct kthread_delayed_work idle_notify_work_cmd_mode;
+#endif
 
 	struct sde_power_event *power_event;
 
@@ -347,11 +353,60 @@ struct sde_crtc {
 	struct mutex ltm_buffer_lock;
 	spinlock_t ltm_lock;
 	bool needs_hw_reset;
+#ifdef CONFIG_MACH_XIAOMI
+	int hist_irq_idx;
+#endif
 
 	int comp_ratio;
 };
 
 #define to_sde_crtc(x) container_of(x, struct sde_crtc, base)
+
+#ifdef CONFIG_MACH_XIAOMI
+/**
+ * enum sde_crtc_mi_layer_type: type of mi layer
+ * @MI_LAYER_FOD_PRESSED_ICON: FOD touched icon layer
+ * @MI_LAYER_FOD_ICON: FOD untouch icon layer
+ * @MI_LAYER_AOD: AOD layer
+ */
+enum sde_crtc_mi_layer_type {
+	MI_LAYER_NULL = 0x0,
+	MI_LAYER_FOD_HBM_OVERLAY = 0x1,
+	MI_LAYER_FOD_ICON = 0x2,
+	MI_LAYER_AOD = 0x4,
+	MI_LAYER_MAX,
+};
+
+/**
+ * sde_crtc_mi_dc_backlight - mi dc backlight
+ * @mi_dc_bl_state: dc backlihgt state
+ * @mi_dc_backlight_level: last backlight stash
+ * @mi_dc_layer_alpha: dc dim layer alpha
+ */
+typedef struct sde_crtc_mi_dc_backlight
+{
+	uint8_t mi_dc_bl_state;
+	int32_t mi_dc_bl_level;
+	int32_t mi_dc_bl_layer_alpha;
+} sde_crtc_mi_dc_backlight;
+
+typedef struct sde_crtc_mi_layer
+{
+	int32_t layer_index;
+	enum sde_crtc_mi_layer_type last_state;
+} sde_crtc_mi_layer;
+
+/**
+ * sde_crtc_mi_state - mi crtc state
+ * @mi_dim_layer: dim layer added by Mi
+ */
+struct sde_crtc_mi_state {
+	struct sde_hw_dim_layer *mi_dim_layer;
+	struct sde_crtc_mi_layer mi_layer;
+	uint32_t dimlayer_backlight_stash;
+	uint8_t  dimlayer_alpha_stash;
+};
+#endif
 
 /**
  * struct sde_crtc_state - sde container for atomic crtc state
@@ -409,6 +464,10 @@ struct sde_crtc_state {
 	struct sde_hw_scaler3_lut_cfg scl3_lut_cfg;
 
 	struct sde_core_perf_params new_perf;
+#ifdef CONFIG_MACH_XIAOMI
+	struct sde_crtc_mi_state mi_state;
+	uint32_t num_dim_layers_bank;
+#endif
 };
 
 enum sde_crtc_irq_state {
@@ -829,6 +888,27 @@ void sde_crtc_misr_setup(struct drm_crtc *crtc, bool enable, u32 frame_count);
  */
 void sde_crtc_get_misr_info(struct drm_crtc *crtc,
 		struct sde_crtc_misr_info *crtc_misr_info);
+
+#ifdef CONFIG_MACH_XIAOMI
+/**
+ * sde_crtc_mi_atomic_check - to do crtc mi atomic check
+ * @crtc: Pointer to sde crtc state structure
+ * @cstate: Pointer to sde crtc state structure
+ * @pstates: Pointer to sde plane state structure
+ * @cnt: plane refence count
+ */
+int sde_crtc_mi_atomic_check(struct sde_crtc *sde_crtc, struct sde_crtc_state *cstate,
+		void *pstates, int cnt);
+
+/**
+ * sde_crtc_mi_atomic_check - to do crtc mi atomic check
+ * @crtc: Pointer to sde crtc state structure
+ * @cstate: Pointer to sde crtc state structure
+ * @pstates: Pointer to sde plane state structure
+ * @cnt: plane refence count
+ */
+uint32_t sde_crtc_get_mi_fod_sync_info(struct sde_crtc_state *cstate);
+#endif
 
 /**
  * sde_crtc_get_num_datapath - get the number of datapath active

@@ -838,6 +838,24 @@ struct dsi_ctrl_hw_ops {
 	 * @sel_phy:	Bool to control whether to select phy or controller
 	 */
 	void (*hs_req_sel)(struct dsi_ctrl_hw *ctrl, bool sel_phy);
+
+#ifdef CONFIG_MACH_XIAOMI
+	/**
+	 * hw.ops.map_mdp_regs() - maps MDP interface line count registers.
+	 * @pdev:       Pointer to platform device.
+	 * @ctrl:       Pointer to the controller host hardware.
+	 */
+	int (*map_mdp_regs)(struct platform_device *pdev,
+			struct dsi_ctrl_hw *ctrl);
+
+	/**
+	 * hw.ops.log_line_count() - reads the MDP interface line count
+	 *							registers.
+	 * @ctrl:       Pointer to the controller host hardware.
+	 * @cmd_mode:       Boolean to indicate command mode operation.
+	 */
+	u32 (*log_line_count)(struct dsi_ctrl_hw *ctrl, bool cmd_mode);
+#endif
 };
 
 /*
@@ -865,6 +883,10 @@ struct dsi_ctrl_hw {
 	void __iomem *mmss_misc_base;
 	u32 mmss_misc_length;
 	void __iomem *disp_cc_base;
+#ifdef CONFIG_MACH_XIAOMI
+	void __iomem *te_rd_ptr_reg;
+	void __iomem *line_count_reg;
+#endif
 	u32 disp_cc_length;
 	u32 index;
 

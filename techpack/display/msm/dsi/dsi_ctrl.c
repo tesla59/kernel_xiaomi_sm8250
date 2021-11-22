@@ -1220,6 +1220,27 @@ int dsi_message_validate_tx_mode(struct dsi_ctrl *dsi_ctrl,
 	return rc;
 }
 
+#ifdef CONFIG_MACH_XIAOMI
+static u32 calculate_schedule_line(struct dsi_ctrl *dsi_ctrl, u32 flags)
+{
+	u32 line_no = 0x1;
+	struct dsi_mode_info *timing;
+
+	/* check if custom dma scheduling line needed */
+	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
+		(flags & DSI_CTRL_CMD_CUSTOM_DMA_SCHED))
+		line_no = dsi_ctrl->host_config.u.video_engine.dma_sched_line;
+
+	timing = &(dsi_ctrl->host_config.video_timing);
+
+	if (timing)
+		line_no += timing->v_back_porch + timing->v_sync_width +
+				timing->v_active;
+
+	return line_no;
+}
+#endif
+
 static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 				const struct mipi_dsi_msg *msg,
 				struct dsi_ctrl_cmd_dma_fifo_info *cmd,
@@ -1228,11 +1249,16 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 {
 	u32 hw_flags = 0;
 	u32 line_no = 0x1;
+#ifndef CONFIG_MACH_XIAOMI
 	struct dsi_mode_info *timing;
+#endif
 	struct dsi_ctrl_hw_ops dsi_hw_ops = dsi_ctrl->hw.ops;
 
 	SDE_EVT32(dsi_ctrl->cell_index, SDE_EVTLOG_FUNC_ENTRY, flags,
 		msg->flags);
+#ifdef CONFIG_MACH_XIAOMI
+	line_no = calculate_schedule_line(dsi_ctrl, flags);
+#else
 	/* check if custom dma scheduling line needed */
 	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
 		(flags & DSI_CTRL_CMD_CUSTOM_DMA_SCHED))
@@ -1242,6 +1268,7 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 	if (timing)
 		line_no += timing->v_back_porch + timing->v_sync_width +
 				timing->v_active;
+#endif
 	if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
 		dsi_hw_ops.schedule_dma_cmd &&
 		(dsi_ctrl->current_state.vid_engine_state ==
@@ -1249,6 +1276,9 @@ static void dsi_kickoff_msg_tx(struct dsi_ctrl *dsi_ctrl,
 		dsi_hw_ops.schedule_dma_cmd(&dsi_ctrl->hw,
 				line_no);
 
+#ifdef CONFIG_MACH_XIAOMI
+	dsi_ctrl->cmd_mode = (dsi_ctrl->host_config.panel_mode == DSI_OP_CMD_MODE);
+#endif
 	hw_flags |= (flags & DSI_CTRL_CMD_DEFER_TRIGGER) ?
 			DSI_CTRL_HW_CMD_WAIT_FOR_TRIGGER : 0;
 
@@ -1554,8 +1584,16 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 	bool short_resp = false;
 	bool read_done = false;
 	u32 dlen, diff, rlen;
+#ifdef CONFIG_MACH_XIAOMI
+	unsigned char *buff = NULL;
+#else
 	unsigned char *buff;
+#endif
 	char cmd;
+#ifdef CONFIG_MACH_XIAOMI
+	u32 buffer_sz = 0, header_offset = 0;
+	u8 *head = NULL;
+#endif
 
 	if (!msg) {
 		DSI_CTRL_ERR(dsi_ctrl, "Invalid msg\n");
@@ -1568,6 +1606,9 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		short_resp = true;
 		rd_pkt_size = msg->rx_len;
 		total_read_len = 4;
+#ifdef CONFIG_MACH_XIAOMI
+		buffer_sz = 4;
+#endif
 	} else {
 		short_resp = false;
 		current_read_len = 10;
@@ -1577,8 +1618,22 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 			rd_pkt_size = current_read_len;
 
 		total_read_len = current_read_len + 6;
+#ifdef CONFIG_MACH_XIAOMI
+		buffer_sz = (((4 + msg->rx_len + 2) + 3) >> 2) << 2;
+		if (buffer_sz < 16)
+			buffer_sz = 16;
+#endif
 	}
+#ifdef CONFIG_MACH_XIAOMI
+	buff = kzalloc(buffer_sz, GFP_KERNEL);
+	if (!buff) {
+		rc = -ENOMEM;
+		goto error;
+	}
+	head = buff;
+#else
 	buff = msg->rx_buf;
+#endif
 
 	while (!read_done) {
 		rc = dsi_set_max_return_size(dsi_ctrl, msg, rd_pkt_size);
@@ -1636,13 +1691,29 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		}
 	}
 
+#ifdef CONFIG_MACH_XIAOMI
+	buff = head;
+#endif
+
 	if (hw_read_cnt < 16 && !short_resp)
+#ifdef CONFIG_MACH_XIAOMI
+		header_offset = (16 - hw_read_cnt);
+#else
 		buff = msg->rx_buf + (16 - hw_read_cnt);
+#endif
 	else
+#ifdef CONFIG_MACH_XIAOMI
+		header_offset = 0;
+#else
 		buff = msg->rx_buf;
+#endif
 
 	/* parse the data read from panel */
+#ifdef CONFIG_MACH_XIAOMI
+	cmd = buff[header_offset];
+#else
 	cmd = buff[0];
+#endif
 	switch (cmd) {
 	case MIPI_DSI_RX_ACKNOWLEDGE_AND_ERROR_REPORT:
 		DSI_CTRL_ERR(dsi_ctrl, "Rx ACK_ERROR 0x%x\n", cmd);
@@ -1650,15 +1721,27 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 		break;
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_1BYTE:
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_1BYTE:
+#ifdef CONFIG_MACH_XIAOMI
+		rc = dsi_parse_short_read1_resp(msg, &buff[header_offset]);
+#else
 		rc = dsi_parse_short_read1_resp(msg, buff);
+#endif
 		break;
 	case MIPI_DSI_RX_GENERIC_SHORT_READ_RESPONSE_2BYTE:
 	case MIPI_DSI_RX_DCS_SHORT_READ_RESPONSE_2BYTE:
+#ifdef CONFIG_MACH_XIAOMI
+		rc = dsi_parse_short_read2_resp(msg, &buff[header_offset]);
+#else
 		rc = dsi_parse_short_read2_resp(msg, buff);
+#endif
 		break;
 	case MIPI_DSI_RX_GENERIC_LONG_READ_RESPONSE:
 	case MIPI_DSI_RX_DCS_LONG_READ_RESPONSE:
+#ifdef CONFIG_MACH_XIAOMI
+		rc = dsi_parse_long_read_resp(msg, &buff[header_offset]);
+#else
 		rc = dsi_parse_long_read_resp(msg, buff);
+#endif
 		break;
 	default:
 		DSI_CTRL_WARN(dsi_ctrl, "Invalid response: 0x%x\n", cmd);
@@ -1666,6 +1749,9 @@ static int dsi_message_rx(struct dsi_ctrl *dsi_ctrl,
 	}
 
 error:
+#ifdef CONFIG_MACH_XIAOMI
+	kfree(buff);
+#endif
 	return rc;
 }
 
@@ -1966,6 +2052,11 @@ static int dsi_ctrl_dev_probe(struct platform_device *pdev)
 	if (rc)
 		DSI_CTRL_DEBUG(dsi_ctrl, "failed to init axi bus client, rc = %d\n",
 				rc);
+
+#ifdef CONFIG_MACH_XIAOMI
+	if (dsi_ctrl->hw.ops.map_mdp_regs)
+		dsi_ctrl->hw.ops.map_mdp_regs(pdev, &dsi_ctrl->hw);
+#endif
 
 	item->ctrl = dsi_ctrl;
 
@@ -3298,6 +3389,12 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 {
 	int rc = 0;
 	struct dsi_ctrl_hw_ops dsi_hw_ops;
+#ifdef CONFIG_MACH_XIAOMI
+	u32 v_total = 0, fps = 0, cur_line = 0, mem_latency_us = 100;
+	u32 line_time = 0, schedule_line = 0x1, latency_by_line = 0;
+	struct dsi_mode_info *timing;
+	unsigned long flag;
+#endif
 
 	if (!dsi_ctrl) {
 		DSI_CTRL_ERR(dsi_ctrl, "Invalid params\n");
@@ -3313,6 +3410,20 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 
 	mutex_lock(&dsi_ctrl->ctrl_lock);
 
+#ifdef CONFIG_MACH_XIAOMI
+	timing = &(dsi_ctrl->host_config.video_timing);
+
+	if (timing &&
+		(dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE)) {
+		v_total = timing->v_sync_width + timing->v_back_porch +
+			timing->v_front_porch + timing->v_active;
+		fps = timing->refresh_rate;
+		schedule_line = calculate_schedule_line(dsi_ctrl, flags);
+		line_time = (1000000 / fps) / v_total;
+		latency_by_line = CEIL(mem_latency_us, line_time);
+	}
+#endif
+
 	if (!(flags & DSI_CTRL_CMD_BROADCAST_MASTER))
 		dsi_hw_ops.trigger_command_dma(&dsi_ctrl->hw);
 
@@ -3325,7 +3436,40 @@ int dsi_ctrl_cmd_tx_trigger(struct dsi_ctrl *dsi_ctrl, u32 flags)
 		reinit_completion(&dsi_ctrl->irq_info.cmd_dma_done);
 
 		/* trigger command */
+#ifdef CONFIG_MACH_XIAOMI
+		if ((dsi_ctrl->host_config.panel_mode == DSI_OP_VIDEO_MODE) &&
+			dsi_hw_ops.schedule_dma_cmd &&
+			(dsi_ctrl->current_state.vid_engine_state ==
+			DSI_CTRL_ENGINE_ON)) {
+			/*
+			 * This change reads the video line count from
+			 * MDP_INTF_LINE_COUNT register and checks whether
+			 * DMA trigger happens close to the schedule line.
+			 * If it is not close to the schedule line, then DMA
+			 * command transfer is triggered.
+			 */
+			while (1) {
+				local_irq_save(flag);
+				cur_line =
+				dsi_hw_ops.log_line_count(&dsi_ctrl->hw,
+					dsi_ctrl->cmd_mode);
+				if (cur_line <
+					(schedule_line - latency_by_line) ||
+					cur_line > (schedule_line + 1)) {
+					dsi_hw_ops.trigger_command_dma(
+						&dsi_ctrl->hw);
+					local_irq_restore(flag);
+					break;
+				}
+				local_irq_restore(flag);
+				udelay(1000);
+			}
+		} else {
+#endif
 		dsi_hw_ops.trigger_command_dma(&dsi_ctrl->hw);
+#ifdef CONFIG_MACH_XIAOMI
+		}
+#endif
 		if (flags & DSI_CTRL_CMD_ASYNC_WAIT) {
 			dsi_ctrl->dma_wait_queued = true;
 			queue_work(dsi_ctrl->dma_cmd_workq,
